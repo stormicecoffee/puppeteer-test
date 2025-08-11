@@ -15,34 +15,45 @@ app.post("/", async (req, res) => {
   }
 
   try {
+    // Launch Puppeteer with Railway-safe flags
     const browser = await puppeteer.launch({
-      headless: "new",
+      headless: "new", // "new" mode avoids deprecated headless
       args: ["--no-sandbox", "--disable-setuid-sandbox"]
     });
 
     const page = await browser.newPage();
+
+    // Go to the form page quickly (no waiting for network idle)
     await page.goto("https://www.salesforce.com/ap/form/demo/order-management-demo/", {
-      waitUntil: "networkidle2"
+      waitUntil: "domcontentloaded",
+      timeout: 30000
     });
 
-    await page.type('input[name="UserFirstName"]', order.firstName);
-    await page.type('input[name="UserLastName"]', order.lastName);
-    await page.type('input[name="UserTitle"]', order.jobTitle);
-    await page.type('input[name="UserEmail"]', order.email);
-    await page.type('input[name="CompanyName"]', order.company);
-    await page.type('input[name="UserPhone"]', order.mobile);
+    // Fill form
+    await page.type('input[name="UserFirstName"]', order.firstName || "");
+    await page.type('input[name="UserLastName"]', order.lastName || "");
+    await page.type('input[name="UserTitle"]', order.jobTitle || "");
+    await page.type('input[name="UserEmail"]', order.email || "");
+    await page.type('input[name="CompanyName"]', order.company || "");
+    await page.type('input[name="UserPhone"]', order.mobile || "");
 
-    // If order contains employees
     if (order.employeeValue) {
       await page.select('select[name="CompanyEmployees"]', order.employeeValue);
     }
 
+    // Submit
     await page.click('button[type="submit"]');
 
+    // Wait briefly for submission to process
+    await page.waitForTimeout(3000);
+
     await browser.close();
-    res.status(200).json({ success: true, message: "Form submitted!" });
+
+    // Respond quickly to avoid Railway timeout
+    res.status(200).json({ success: true, message: "Form submitted successfully!" });
+
   } catch (error) {
-    console.error(error);
+    console.error("Puppeteer Error:", error);
     res.status(500).json({ success: false, message: "Puppeteer failed", error: error.toString() });
   }
 });
