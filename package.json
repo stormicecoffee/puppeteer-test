@@ -2,8 +2,10 @@
   "name": "puppeteer-railway-app",
   "version": "1.0.0",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "postinstall": "puppeteer install"
   },
   "dependencies": {
     "body-parser": "^1.20.2",
