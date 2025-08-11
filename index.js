@@ -1,89 +1,52 @@
-const puppeteer = require('puppeteer');
-const readline = require('readline');
+const express = require("express");
+const bodyParser = require("body-parser");
+const puppeteer = require("puppeteer");
 
-// Simple CLI input helper
-function askQuestion(query) {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  return new Promise(resolve => rl.question(query, ans => {
-    rl.close();
-    resolve(ans);
-  }));
-}
+const app = express();
+const port = process.env.PORT || 3000;
 
-(async () => {
-  // Get user input
-  const firstName = await askQuestion('First Name: ');
-  const lastName = await askQuestion('Last Name: ');
-  const jobTitle = await askQuestion('Job Title: ');
-  const email = await askQuestion('Email: ');
-  const company = await askQuestion('Company: ');
-  // Employee options mapping
-  const employeeOptions = {
-  "1": "1 - 5 employees",
-  "2": "6 - 30 employees",
-  "3": "31 - 200 employees",
-  "4": "201 - 500 employees",
-  "5": "501 - 2000 employees",
-  "6": "2000+ employees",
-  };
+app.use(bodyParser.json());
 
-  // Ask for numeric choice
-  let employeeChoice;
-  while (true) {
-	employeeChoice = await askQuestion(
-		'Number of Employees:\n' +
-		' 1. 1 - 5 employees\n' +
-		' 2. 6 - 30 employees\n' +
-		' 3. 31 - 200 employees\n' +
-		' 4. 201 - 500 employees\n' +
-		' 5. 501 - 2000 employees\n' +
-		' 6. 2000+ employees\n> '
-	);
+app.post("/", async (req, res) => {
+  const order = req.body;
 
-	if (employeeOptions[employeeChoice]) break;
-	console.log('Invalid choice. Please enter a number from 1 to 6.');
-	}
+  if (!order || !order.firstName) {
+    return res.status(400).json({ success: false, message: "Missing order details" });
+  }
 
-  const employeeValue = employeeOptions[employeeChoice];
+  try {
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-sandbox"]
+    });
 
-  const mobile = await askQuestion('Mobile: ');
+    const page = await browser.newPage();
+    await page.goto("https://www.salesforce.com/ap/form/demo/order-management-demo/", {
+      waitUntil: "networkidle2"
+    });
 
-  const browser = await puppeteer.launch({
-    headless: false, // set to true for headless mode when not debugging
-    defaultViewport: null,
-  });
-  console.log('Opening the browser...');
+    await page.type('input[name="UserFirstName"]', order.firstName);
+    await page.type('input[name="UserLastName"]', order.lastName);
+    await page.type('input[name="UserTitle"]', order.jobTitle);
+    await page.type('input[name="UserEmail"]', order.email);
+    await page.type('input[name="CompanyName"]', order.company);
+    await page.type('input[name="UserPhone"]', order.mobile);
 
-  const page = await browser.newPage();
-  await page.goto('https://www.salesforce.com/ap/form/demo/order-management-demo/', {
-    waitUntil: 'networkidle2',
-  });
+    // If order contains employees
+    if (order.employeeValue) {
+      await page.select('select[name="CompanyEmployees"]', order.employeeValue);
+    }
 
-  // Fill the form fields
-  await page.type('input[name="UserFirstName"]', firstName);
-  await page.type('input[name="UserLastName"]', lastName);
-  await page.type('input[name="UserTitle"]', jobTitle);
-  await page.type('input[name="UserEmail"]', email);
-  await page.type('input[name="CompanyName"]', company);
-  await page.type('input[name="UserPhone"]', mobile);
+    await page.click('button[type="submit"]');
 
-  // Select dropdown option for number of employees
-  await page.select('select[name="CompanyEmployees"]', employeeValue);
+    await browser.close();
+    res.status(200).json({ success: true, message: "Form submitted!" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Puppeteer failed", error: error.toString() });
+  }
+});
 
-  // Country is already selected as per IP address – skip unless you want to change
-
-  // This is for us to check the form submission before clicking the button
-  await new Promise(resolve => setTimeout(resolve, 10000));
-
-  // Click the "Watch Demo" button
-  await page.click('button[type="submit"]');
-
-  // Optional: Wait for some response or next page
-  await new Promise(resolve => setTimeout(resolve, 10000));
-
-  console.log('Form filled and submitted!');
-  await browser.close();
-})();
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+});
